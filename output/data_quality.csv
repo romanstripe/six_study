@@ -1,0 +1,15 @@
+check_name,actual,expected,passed
+history_rows,256,256,True
+history_lots,64,64,True
+metrology_rows,320,320,True
+metrology_lots,64,64,True
+eds_rows,64,64,True
+eds_lots,64,64,True
+shipment_rows,64,64,True
+shipment_lots,64,64,True
+history_duplicate_keys,0,0,True
+metrology_duplicate_keys,0,0,True
+eds_duplicate_keys,0,0,True
+shipment_duplicate_keys,0,0,True
+lots_with_four_ordered_steps,64,64,True
+lots_with_five_metrology_wafers,64,64,True

@@ -1,0 +1,40 @@
+{
+  "affected_lots": [
+    "L6035",
+    "L6039",
+    "L6040",
+    "L6043",
+    "L6048",
+    "L6051",
+    "L6055",
+    "L6056"
+  ],
+  "affected_lot_count": 8,
+  "affected_module_qty": 16100,
+  "by_customer": {
+    "고객A": {
+      "lot_count": 5,
+      "module_qty": 10200
+    },
+    "고객B": {
+      "lot_count": 2,
+      "module_qty": 4100
+    },
+    "미출하": {
+      "lot_count": 1,
+      "module_qty": 1800
+    }
+  },
+  "affected_hot_refresh_fail_mean_pct": 2.071,
+  "unaffected_hot_refresh_fail_mean_pct": 0.393,
+  "boundary_lots": [
+    "L6028",
+    "L6059"
+  ],
+  "l6035": {
+    "gox_raw_mean_nm": 4.884,
+    "gox_corrected_mean_nm": 4.734,
+    "hot_refresh_fail_pct": 1.72,
+    "module_qty": 2000
+  }
+}
