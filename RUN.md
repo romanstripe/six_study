@@ -24,7 +24,7 @@ python analyze.py
 입력과 출력 폴더를 바꾸려면 다음처럼 실행한다.
 
 ```powershell
-python analyze.py --data-dir data --output-dir output
+python analyze.py --data-dir data --output-dir output --customer-output AFFECTED_LOTS_고객A.csv
 ```
 
 ## 입력
@@ -48,8 +48,7 @@ python analyze.py --data-dir data --output-dir output
 - `output/core_summary.json`: 핵심 집계와 L6035 검산값
 - `output/figures/gox_eds_by_lot.png`: lot별 GOX·EDS 추이
 - `output/figures/gox_vs_hot_refresh.png`: GOX와 EDS 고온 불량률 관계
-
-고객 전달용 `AFFECTED_LOTS_고객A.csv`는 Phase 4 산출물이므로 Phase 1에서는 생성하지 않는다.
+- `AFFECTED_LOTS_고객A.csv`: 고객A 전달용 영향 lot 5개. UTF-8 BOM 없이 `LOT_ID,SHIP_DATE,MODULE_QTY` 순서로 생성하며 합계 행은 넣지 않는다.
 
 ## 실패 시 확인
 

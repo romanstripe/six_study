@@ -488,6 +488,7 @@ def plot_gox_vs_eds(summary: pd.DataFrame, path: Path) -> None:
 
 def write_outputs(
     output_dir: Path,
+    customer_output: Path,
     quality: pd.DataFrame,
     metrology: pd.DataFrame,
     summary: pd.DataFrame,
@@ -512,6 +513,27 @@ def write_outputs(
         json.dumps(core_summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    affected_customer_a = summary.loc[
+        summary["is_affected"] & summary["customer"].eq("고객A"),
+        ["lot_id", "ship_date", "module_qty"],
+    ].copy()
+    affected_customer_a = affected_customer_a.rename(
+        columns={
+            "lot_id": "LOT_ID",
+            "ship_date": "SHIP_DATE",
+            "module_qty": "MODULE_QTY",
+        }
+    ).sort_values("LOT_ID")
+    affected_customer_a["SHIP_DATE"] = affected_customer_a[
+        "SHIP_DATE"
+    ].dt.strftime("%Y-%m-%d")
+    customer_output.parent.mkdir(parents=True, exist_ok=True)
+    affected_customer_a.to_csv(
+        customer_output,
+        index=False,
+        encoding="utf-8",
+        lineterminator="\n",
+    )
     plot_lot_trend(summary, figures_dir / "gox_eds_by_lot.png")
     plot_gox_vs_eds(summary, figures_dir / "gox_vs_hot_refresh.png")
 
@@ -522,6 +544,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
+    parser.add_argument(
+        "--customer-output",
+        type=Path,
+        default=Path("AFFECTED_LOTS_고객A.csv"),
+    )
     return parser.parse_args()
 
 
@@ -536,6 +563,7 @@ def main() -> None:
     core_summary = make_core_summary(summary, boundaries)
     write_outputs(
         args.output_dir,
+        args.customer_output,
         quality,
         metrology,
         summary,
