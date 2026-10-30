@@ -202,6 +202,15 @@ def correct_metrology(metrology: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def affected_process_mask(
+    equipment: pd.Series, process_time: pd.Series
+) -> pd.Series:
+    """Return the approved process-based affected-lot decision."""
+    return equipment.eq("DF-03") & process_time.between(
+        AFFECTED_START, AFFECTED_END, inclusive="both"
+    )
+
+
 def build_lot_summary(inputs: Inputs, metrology: pd.DataFrame) -> pd.DataFrame:
     process = inputs.history.pivot(
         index="lot_id",
@@ -243,11 +252,8 @@ def build_lot_summary(inputs: Inputs, metrology: pd.DataFrame) -> pd.DataFrame:
     if len(summary) != 64:
         raise ValueError(f"joined result has {len(summary)} rows; expected 64")
 
-    summary["is_affected"] = (
-        summary["eq_id_diff_gox"].eq("DF-03")
-        & summary["track_in_time_diff_gox"].between(
-            AFFECTED_START, AFFECTED_END, inclusive="both"
-        )
+    summary["is_affected"] = affected_process_mask(
+        summary["eq_id_diff_gox"], summary["track_in_time_diff_gox"]
     )
     summary["shipment_status"] = summary["ship_date"].map(
         lambda value: "미출하" if pd.isna(value) else "출하"
