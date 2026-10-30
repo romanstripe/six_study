@@ -45,10 +45,14 @@ python analyze.py --data-dir data --output-dir output --customer-output AFFECTED
 - `output/lot_summary.csv`: 64개 lot의 공정·계측·EDS·출하 결합 결과
 - `output/affected_lots_internal.csv`: 공식 공정 기준의 전체 영향 lot 8개
 - `output/df03_boundary_lots.csv`: 마지막 정상 및 교체 후 첫 정상 DF-03 lot
+- `output/out_of_scope_review.csv`: 공식 범위 밖 56 lot의 GOX·EDS 전수 점검 결과
+- `output/out_of_scope_anomalies.csv`: 공식 영향 범위와 분리된 별도 조사 필요 lot
 - `output/core_summary.json`: 핵심 집계와 L6035 검산값
 - `output/figures/gox_eds_by_lot.png`: lot별 GOX·EDS 추이
 - `output/figures/gox_vs_hot_refresh.png`: GOX와 EDS 고온 불량률 관계
 - `AFFECTED_LOTS_고객A.csv`: 고객A 전달용 영향 lot 5개. UTF-8 BOM 없이 `LOT_ID,SHIP_DATE,MODULE_QTY` 순서로 생성하며 합계 행은 넣지 않는다.
+
+범위 밖 검토에서 EDS 0.3~0.6%는 출하 규격이 아닌 평상 참고 범위다. 0.3% 미만은 더 낮은 불량률이므로 참고 범위 이탈로만 표시하며 별도 이상으로 분류하지 않는다. GOX 규격 이탈 또는 EDS 0.6% 초과가 있으면 공식 영향 lot에 합치지 않고 `별도 이상, 조사 필요`로 분리한다.
 
 ## 실패 시 확인
 

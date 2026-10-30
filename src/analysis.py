@@ -310,7 +310,40 @@ def boundary_lots(summary: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([before, after], ignore_index=True)
 
 
-def make_core_summary(summary: pd.DataFrame, boundaries: pd.DataFrame) -> dict:
+def build_out_of_scope_review(summary: pd.DataFrame) -> pd.DataFrame:
+    """Review non-affected lots without changing the approved affected scope."""
+    review = summary.loc[~summary["is_affected"]].copy()
+    review["gox_mean_out_of_spec"] = (
+        review["gox_corrected_mean_nm"].lt(review["gox_spec_lo_nm"])
+        | review["gox_corrected_mean_nm"].gt(review["gox_spec_hi_nm"])
+    )
+    review["gox_any_point_out_of_spec"] = (
+        review["gox_corrected_min_nm"].lt(review["gox_spec_lo_nm"])
+        | review["gox_corrected_max_nm"].gt(review["gox_spec_hi_nm"])
+    )
+    review["eds_below_reference_range"] = review[
+        "hot_refresh_fail_pct"
+    ].lt(0.3)
+    review["eds_above_reference_range"] = review[
+        "hot_refresh_fail_pct"
+    ].gt(0.6)
+    review["needs_separate_investigation"] = (
+        review["gox_mean_out_of_spec"]
+        | review["gox_any_point_out_of_spec"]
+        | review["eds_above_reference_range"]
+    )
+    review["review_result"] = "점검 기준상 별도 이상 없음"
+    review.loc[
+        review["needs_separate_investigation"], "review_result"
+    ] = "별도 이상, 조사 필요"
+    return review.sort_values("lot_id").reset_index(drop=True)
+
+
+def make_core_summary(
+    summary: pd.DataFrame,
+    boundaries: pd.DataFrame,
+    out_of_scope: pd.DataFrame,
+) -> dict:
     affected = summary.loc[summary["is_affected"]]
     customer_groups = affected.groupby("customer", dropna=False).agg(
         lot_count=("lot_id", "count"),
@@ -336,6 +369,33 @@ def make_core_summary(summary: pd.DataFrame, boundaries: pd.DataFrame) -> dict:
             float(normal["hot_refresh_fail_pct"].mean()), 3
         ),
         "boundary_lots": boundaries["lot_id"].tolist(),
+        "out_of_scope_review": {
+            "lot_count": int(len(out_of_scope)),
+            "gox_corrected_mean_min_nm": round(
+                float(out_of_scope["gox_corrected_mean_nm"].min()), 3
+            ),
+            "gox_corrected_mean_max_nm": round(
+                float(out_of_scope["gox_corrected_mean_nm"].max()), 3
+            ),
+            "gox_corrected_point_min_nm": round(
+                float(out_of_scope["gox_corrected_min_nm"].min()), 3
+            ),
+            "gox_corrected_point_max_nm": round(
+                float(out_of_scope["gox_corrected_max_nm"].max()), 3
+            ),
+            "eds_hot_refresh_min_pct": round(
+                float(out_of_scope["hot_refresh_fail_pct"].min()), 3
+            ),
+            "eds_hot_refresh_max_pct": round(
+                float(out_of_scope["hot_refresh_fail_pct"].max()), 3
+            ),
+            "eds_below_reference_lot_count": int(
+                out_of_scope["eds_below_reference_range"].sum()
+            ),
+            "separate_investigation_lot_count": int(
+                out_of_scope["needs_separate_investigation"].sum()
+            ),
+        },
         "l6035": {
             "gox_raw_mean_nm": round(float(focus["gox_raw_mean_nm"]), 3),
             "gox_corrected_mean_nm": round(
@@ -499,6 +559,7 @@ def write_outputs(
     metrology: pd.DataFrame,
     summary: pd.DataFrame,
     boundaries: pd.DataFrame,
+    out_of_scope: pd.DataFrame,
     core_summary: dict,
 ) -> None:
     figures_dir = output_dir / "figures"
@@ -514,6 +575,12 @@ def write_outputs(
     )
     boundaries.to_csv(
         output_dir / "df03_boundary_lots.csv", index=False, encoding="utf-8"
+    )
+    out_of_scope.to_csv(
+        output_dir / "out_of_scope_review.csv", index=False, encoding="utf-8"
+    )
+    out_of_scope.loc[out_of_scope["needs_separate_investigation"]].to_csv(
+        output_dir / "out_of_scope_anomalies.csv", index=False, encoding="utf-8"
     )
     (output_dir / "core_summary.json").write_text(
         json.dumps(core_summary, ensure_ascii=False, indent=2) + "\n",
@@ -566,7 +633,8 @@ def main() -> None:
     summary = build_lot_summary(inputs, metrology)
     validate_results(summary)
     boundaries = boundary_lots(summary)
-    core_summary = make_core_summary(summary, boundaries)
+    out_of_scope = build_out_of_scope_review(summary)
+    core_summary = make_core_summary(summary, boundaries, out_of_scope)
     write_outputs(
         args.output_dir,
         args.customer_output,
@@ -574,6 +642,7 @@ def main() -> None:
         metrology,
         summary,
         boundaries,
+        out_of_scope,
         core_summary,
     )
     print(json.dumps(core_summary, ensure_ascii=False, indent=2))

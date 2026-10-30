@@ -15,6 +15,7 @@ from src.analysis import (
     Inputs,
     affected_process_mask,
     boundary_lots,
+    build_out_of_scope_review,
     build_lot_summary,
     check_data_quality,
     correct_metrology,
@@ -29,6 +30,7 @@ from src.analysis import (
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 REPLY_PATH = ROOT / "REPLY_고객A.md"
+REPORT_PATH = ROOT / "REPORT_사내.md"
 
 
 @pytest.fixture(scope="session")
@@ -39,13 +41,15 @@ def analysis_result() -> dict[str, object]:
     summary = build_lot_summary(inputs, metrology)
     validate_results(summary)
     boundaries = boundary_lots(summary)
-    core = make_core_summary(summary, boundaries)
+    out_of_scope = build_out_of_scope_review(summary)
+    core = make_core_summary(summary, boundaries, out_of_scope)
     return {
         "inputs": inputs,
         "quality": quality,
         "metrology": metrology,
         "summary": summary,
         "boundaries": boundaries,
+        "out_of_scope": out_of_scope,
         "core": core,
     }
 
@@ -65,6 +69,7 @@ def generated_outputs(
         analysis_result["metrology"],
         analysis_result["summary"],
         analysis_result["boundaries"],
+        analysis_result["out_of_scope"],
         analysis_result["core"],
     )
     return {"base": base, "output": output_dir, "customer": customer_output}
@@ -242,6 +247,61 @@ def test_l6035_full_check_values(analysis_result: dict[str, object]) -> None:
     assert row["customer"] == "고객A"
 
 
+def test_l6040_is_independent_mt01_evidence(
+    analysis_result: dict[str, object],
+) -> None:
+    summary: pd.DataFrame = analysis_result["summary"]
+    row = summary.set_index("lot_id").loc["L6040"]
+    assert row["is_affected"]
+    assert row["metro_tool"] == "MT-01"
+    assert row["corrected_point_count"] == 0
+    assert row["gox_raw_mean_nm"] == pytest.approx(4.732)
+    assert row["gox_corrected_min_nm"] == pytest.approx(4.71)
+    assert row["gox_corrected_max_nm"] == pytest.approx(4.75)
+    assert row["shipment_status"] == "미출하"
+
+
+def test_out_of_scope_review_results(analysis_result: dict[str, object]) -> None:
+    review: pd.DataFrame = analysis_result["out_of_scope"]
+    assert len(review) == 56
+    assert review["lot_id"].nunique() == 56
+    assert not review["is_affected"].any()
+    assert review["gox_corrected_mean_nm"].min() == pytest.approx(4.984)
+    assert review["gox_corrected_mean_nm"].max() == pytest.approx(5.016)
+    assert review["gox_corrected_min_nm"].min() == pytest.approx(4.95)
+    assert review["gox_corrected_max_nm"].max() == pytest.approx(5.05)
+    assert review["hot_refresh_fail_pct"].min() == pytest.approx(0.22)
+    assert review["hot_refresh_fail_pct"].max() == pytest.approx(0.60)
+    assert review["eds_below_reference_range"].sum() == 14
+    assert review["eds_above_reference_range"].sum() == 0
+    assert review["gox_mean_out_of_spec"].sum() == 0
+    assert review["gox_any_point_out_of_spec"].sum() == 0
+    assert review["needs_separate_investigation"].sum() == 0
+
+
+def test_out_of_scope_flag_boundaries() -> None:
+    fixture = pd.DataFrame(
+        {
+            "lot_id": ["A", "B", "C", "D"],
+            "is_affected": [False, False, False, False],
+            "gox_corrected_mean_nm": [4.8, 5.2, 4.799, 5.0],
+            "gox_corrected_min_nm": [4.8, 5.19, 4.79, 4.9],
+            "gox_corrected_max_nm": [4.81, 5.2, 4.81, 5.1],
+            "gox_spec_lo_nm": [4.8] * 4,
+            "gox_spec_hi_nm": [5.2] * 4,
+            "hot_refresh_fail_pct": [0.3, 0.6, 0.2, 0.601],
+        }
+    )
+    review = build_out_of_scope_review(fixture).set_index("lot_id")
+    assert not review.loc["A", "needs_separate_investigation"]
+    assert not review.loc["B", "needs_separate_investigation"]
+    assert review.loc["C", "gox_mean_out_of_spec"]
+    assert review.loc["C", "eds_below_reference_range"]
+    assert review.loc["C", "needs_separate_investigation"]
+    assert review.loc["D", "eds_above_reference_range"]
+    assert review.loc["D", "needs_separate_investigation"]
+
+
 def test_customer_csv_contract(generated_outputs: dict[str, Path]) -> None:
     path = generated_outputs["customer"]
     raw = path.read_bytes()
@@ -272,6 +332,30 @@ def test_generated_figures_are_nonempty(generated_outputs: dict[str, Path]) -> N
         assert path.stat().st_size > 10_000
 
 
+def test_out_of_scope_output_contract(generated_outputs: dict[str, Path]) -> None:
+    output = generated_outputs["output"]
+    review = pd.read_csv(output / "out_of_scope_review.csv")
+    anomalies = pd.read_csv(output / "out_of_scope_anomalies.csv")
+    assert len(review) == 56
+    assert len(anomalies) == 0
+    assert "needs_separate_investigation" in anomalies.columns
+    assert not review["needs_separate_investigation"].any()
+
+
+def test_internal_report_contains_phase6_findings() -> None:
+    text = REPORT_PATH.read_text(encoding="utf-8")
+    for required in (
+        "공식 범위 밖 56 lot 전수 점검",
+        "4.984~5.016 nm",
+        "4.95~5.05 nm",
+        "별도 조사 필요 lot",
+        "0개",
+        "실제 불합격·홀드",
+        "잠정 보정 타당성을 독립적으로 뒷받침",
+    ):
+        assert required in text
+
+
 def test_customer_reply_publication_scope() -> None:
     text = REPLY_PATH.read_text(encoding="utf-8")
     forbidden_patterns = [
@@ -297,6 +381,8 @@ def test_customer_reply_publication_scope() -> None:
         "2026-11-15",
     ):
         assert required_date in text
+    assert "공식 범위 밖" not in text
+    assert "별도 이상" not in text
 
 
 def test_reproducible_tabular_outputs(
@@ -313,6 +399,7 @@ def test_reproducible_tabular_outputs(
         analysis_result["metrology"],
         analysis_result["summary"],
         analysis_result["boundaries"],
+        analysis_result["out_of_scope"],
         analysis_result["core"],
     )
 
@@ -323,6 +410,8 @@ def test_reproducible_tabular_outputs(
         "lot_summary.csv",
         "affected_lots_internal.csv",
         "df03_boundary_lots.csv",
+        "out_of_scope_review.csv",
+        "out_of_scope_anomalies.csv",
         "core_summary.json",
     ):
         assert (first_output / relative_path).read_bytes() == (
@@ -337,3 +426,5 @@ def test_core_summary_json_is_valid(generated_outputs: dict[str, Path]) -> None:
     assert result["affected_lot_count"] == 8
     assert result["affected_module_qty"] == 16100
     assert result["boundary_lots"] == ["L6028", "L6059"]
+    assert result["out_of_scope_review"]["lot_count"] == 56
+    assert result["out_of_scope_review"]["separate_investigation_lot_count"] == 0

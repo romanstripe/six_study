@@ -31,6 +31,17 @@
     "L6028",
     "L6059"
   ],
+  "out_of_scope_review": {
+    "lot_count": 56,
+    "gox_corrected_mean_min_nm": 4.984,
+    "gox_corrected_mean_max_nm": 5.016,
+    "gox_corrected_point_min_nm": 4.95,
+    "gox_corrected_point_max_nm": 5.05,
+    "eds_hot_refresh_min_pct": 0.22,
+    "eds_hot_refresh_max_pct": 0.6,
+    "eds_below_reference_lot_count": 14,
+    "separate_investigation_lot_count": 0
+  },
   "l6035": {
     "gox_raw_mean_nm": 4.884,
     "gox_corrected_mean_nm": 4.734,
